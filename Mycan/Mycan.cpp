@@ -1,77 +1,79 @@
-#include "mbed.h"
 #include "Mycan.h"
 
-Mycan::Mycan(PinName _pin_rd, PinName _pin_td) : can(_pin_rd, _pin_td)
+
+/*----------------------------------------------------*/
+
+//"id"は小さくしたほうがメモリ効率がいいですね
+//あと、整数で使うときは"num"は1~7、小数は0か1で御願いします
+
+/*----------------------------------------------------*/
+
+Mycan::Mycan(PinName _rd, PinName _td, float freq) : can(_rd, _td)
 {
-    min_id = 1;//※ここで最小IDを設定
+    can.frequency(freq);
 };
 
-void Mycan::set(unsigned int _id, int _num, short _data)
+void Mycan::setI(uint32_t _id, int _num, int16_t _data)
 {
+    write_type = 0;
     td_id = _id;
     td_num = _num;
-    data = _data;
-    write_val[td_num] = data;
-    _expressAbsoluteValue();//絶対値にする関数
+    td_data.value[td_num] = _data;
+    
+    for (int i = 0; i < 7; i++)
+    {
+        if (td_data.value[i] >= 0)
+            td_integer.value[7] &= ~(1 << i);
+        else
+            td_integer.value[7] |= (1 << i);
+        td_integer.value[i] = abs(td_data.value[i]);
+    }
+}
+
+void Mycan::setF(uint32_t _id, int _num, float _data)
+{
+    write_type = 1;
+    td_id = _id;
+    td_num = _num;
+    td_decimal.value[td_num] = _data;
 }
 
 bool Mycan::send()
 {
-    return can.write(CANMessage(td_id, (char*)&td_data, 8));
+    if (!write_type) return can.write(CANMessage(td_id, (char*)&td_integer, 8));
+    else if (write_type) return can.write(CANMessage(td_id, (char*)&td_decimal, 8));
 }
 
-void Mycan::read()
+void Mycan::readI()
 {
+    read_type = 0;
     CANMessage received;
     can.read(received);
-    rd_data = *(read_can *)received.data;
-    _expressSignVal(received.id);//符号を付与する関数
+    rd_integer = *(can_integer*)received.data;
+    
+    for (int i = 0; i < 7; i++) {
+        if (rd_integer.value[7] & (1 << i))
+            integer_storage.value[i] = rd_integer.value[i] * -1;
+        else integer_storage.value[i] = rd_integer.value[i];
+    }
+    integer_values_storage[received.id] = integer_storage;
 }
 
-float Mycan::get(unsigned int _id, int _num)
+void Mycan::readF()
+{
+    read_type = 1;
+    CANMessage received;
+    can.read(received);
+    rd_decimal = *(can_decimal *)received.data;
+    
+    decimal_values_storage[received.id] = rd_decimal;
+}
+
+float Mycan::get(uint32_t _id, int _num)
 {
     rd_id = _id;
     rd_num = _num;
-    return read_val[rd_id - min_id][rd_num];
+    if (!read_type) return integer_values_storage[rd_id].value[rd_num];
+    else if (read_type) return decimal_values_storage[rd_id].value[rd_num];
 }
 
-void Mycan::_expressAbsoluteValue()
-{
-    write_val[0] = 0;
-    for (int i = 1; i < 8; i++)
-    {
-        if (write_val[i] >= 0)
-            write_val[0] &= ~(1 << i);
-        else
-            write_val[0] |= (1 << i);
-    }
-    td_data.writeVal_0 = write_val[0];
-    td_data.writeVal_1 = abs(write_val[1]);
-    td_data.writeVal_2 = abs(write_val[2]);
-    td_data.writeVal_3 = abs(write_val[3]);
-    td_data.writeVal_4 = abs(write_val[4]);
-    td_data.writeVal_5 = abs(write_val[5]);
-    td_data.writeVal_6 = abs(write_val[6]);
-    td_data.writeVal_7 = abs(write_val[7]);
-}
-
-void Mycan::_expressSignVal(unsigned int id)
-{
-    read_val[id - min_id][0] = rd_data.readVal_0;
-    read_val[id - min_id][1] = rd_data.readVal_1;
-    read_val[id - min_id][2] = rd_data.readVal_2;
-    read_val[id - min_id][3] = rd_data.readVal_3;
-    read_val[id - min_id][4] = rd_data.readVal_4;
-    read_val[id - min_id][5] = rd_data.readVal_5;
-    read_val[id - min_id][6] = rd_data.readVal_6;
-    read_val[id - min_id][7] = rd_data.readVal_7;
-    
-    for (int j = 1; j < 8; j++)
-    {
-        if (read_val[id - min_id][0] & (1 << j))
-            read_val[id - min_id][j] *= -1;
-    }
-}
-
-short Mycan::read_val[10][8];
-short Mycan::write_val[8];
