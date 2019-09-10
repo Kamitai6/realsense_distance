@@ -12,12 +12,15 @@ matrix = np.empty((3,3))
 before = None
 
 
+
 def set_info(camera_msgs):
 	global matrix
 	matrix = np.array(camera_msgs.K).reshape((3, 3))
 
+
 def get_color_coordinate(frame):
 	x = np.zeros((2, 2))
+	scale_area = np.zeros((2, 480, 640, 3))
 	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 	
@@ -54,9 +57,8 @@ def get_color_coordinate(frame):
 		cv2.drawContours(frame, r_contours[r_max_idx], -1, (0,0,255), 3)
 		r_mask_mask = np.zeros_like(frame)
 		cv2.fillConvexPoly(r_mask_mask, r_contours[r_max_idx], (255,255,255))
-		r_M = np.float32([[0.5, 0, 160], [0, 0.5, 120]])
-		res_r_mask_mask = cv2.warpAffine(r_mask_mask, r_M, (640, 480))
-	
+		r_M = np.float32([[0.5, 0, (x[0,0]-x[0,0]/2)], [0, 0.5, (x[0,1]-x[0,1]/2)]])
+		scale_area[0] = cv2.warpAffine(r_mask_mask, r_M, (640, 480))
 	if (len(b_area) != 0 and np.nanmax(b_area) / (640*480) > 0.005):
 		b_max_idx = np.argmax(b_area)
 		b_max_area = b_contours[b_max_idx]
@@ -66,13 +68,14 @@ def get_color_coordinate(frame):
 		cv2.drawContours(frame, b_contours, b_max_idx, (255,0,0), 3)
 		b_mask_mask = np.zeros_like(frame)
 		cv2.fillConvexPoly(b_mask_mask, b_contours[b_max_idx], (255,255,255))
-		b_M = np.float32([[0.5, 0, 160], [0, 0.5, 120]])
-		res_b_mask_mask = cv2.warpAffine(b_mask_mask, b_M, (640, 480))
-		cv2.imshow("mask", res_b_mask_mask)
+		b_M = np.float32([[0.5, 0, (x[1,0]-x[1,0]/2)], [0, 0.5, (x[1,1]-x[1,1]/2)]])
+		scale_area[1] = cv2.warpAffine(b_mask_mask, b_M, (640, 480))
 	
-	return x
+	return (scale_area,x)
+
 
 def calcu_scale(color_msgs, depth_msgs):
+	coordinate = np.zeros((2, 3))
 	try:
 		image = bridge.imgmsg_to_cv2(color_msgs, 'bgr8')
 		depth = bridge.imgmsg_to_cv2(depth_msgs, '16UC1')
@@ -80,12 +83,18 @@ def calcu_scale(color_msgs, depth_msgs):
 		rospy.logerr(e)
 	
 	area = get_color_coordinate(image)
-	u = int(area[1,0])
-	v = int(area[1,1])
-	distance = depth[v,u]
-	test = np.array([(u - 319.5) / matrix[0,0] * distance, (v - 239.5) / matrix[1,1] * distance])
+
+	r_distance = np.mean(depth[((area[0][0, :, :, 0]) > 0)])
+	r_u = int(area[1][0,0])
+	r_v = int(area[1][0,1])
+	coordinate[0] = np.array([(r_u - 319.5) / matrix[0,0] * r_distance, (r_v - 239.5) / matrix[1,1] * r_distance, r_distance])
 	
-	rospy.loginfo(test)
+	b_distance = np.mean(depth[((area[0][1, :, :, 0]) > 0)])
+	b_u = int(area[1][1,0])
+	b_v = int(area[1][1,1])
+	coordinate[1] = np.array([(b_u - 319.5) / matrix[0,0] * b_distance, (b_v - 239.5) / matrix[1,1] * b_distance, b_distance])
+
+	rospy.loginfo(coordinate)
 
 	cv2.imshow("image", image)
 	cv2.waitKey(5)
@@ -94,11 +103,13 @@ def calcu_scale(color_msgs, depth_msgs):
 def setup():
 	rospy.Subscriber("/camera/depth/camera_info", CameraInfo, set_info)
 
+
 def listener():
 	rospy.init_node('main')
 	ts = message_filters.ApproximateTimeSynchronizer([message_filters.Subscriber("/camera/color/image_raw", Image), message_filters.Subscriber("/camera/depth/image_rect_raw", Image)], 10000, 0.5)
 	ts.registerCallback(calcu_scale)
 	rospy.spin()
+
 
 if __name__ == '__main__':
 	try:
