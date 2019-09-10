@@ -4,12 +4,13 @@ import cv2
 import numpy as np
 import rospy
 from sensor_msgs.msg import Image, CameraInfo
+from std_msgs.msg import Float32MultiArray
 import cv_bridge
 import message_filters
 
-bridge = cv_bridge.CvBridge()
 matrix = np.empty((3,3))
 before = None
+pub = rospy.Publisher("bath_towel", Float32MultiArray, queue_size=10)
 
 
 
@@ -75,7 +76,9 @@ def get_color_coordinate(frame):
 
 
 def calcu_scale(color_msgs, depth_msgs):
-	coordinate = np.zeros((2, 3))
+	bridge = cv_bridge.CvBridge()
+	coordinate = Float32MultiArray()
+	coordinate.data = [0]*6
 	try:
 		image = bridge.imgmsg_to_cv2(color_msgs, 'bgr8')
 		depth = bridge.imgmsg_to_cv2(depth_msgs, '16UC1')
@@ -83,19 +86,24 @@ def calcu_scale(color_msgs, depth_msgs):
 		rospy.logerr(e)
 	
 	area = get_color_coordinate(image)
-
+	
 	r_distance = np.mean(depth[((area[0][0, :, :, 0]) > 0)])
+	if(np.isnan(r_distance)): 
+		r_distance = 0.0
 	r_u = int(area[1][0,0])
 	r_v = int(area[1][0,1])
-	coordinate[0] = np.array([(r_u - 319.5) / matrix[0,0] * r_distance, (r_v - 239.5) / matrix[1,1] * r_distance, r_distance])
-	
+
 	b_distance = np.mean(depth[((area[0][1, :, :, 0]) > 0)])
+	if(np.isnan(b_distance)): 
+		b_distance = 0.0
 	b_u = int(area[1][1,0])
 	b_v = int(area[1][1,1])
-	coordinate[1] = np.array([(b_u - 319.5) / matrix[0,0] * b_distance, (b_v - 239.5) / matrix[1,1] * b_distance, b_distance])
+
+	coordinate.data = [(r_u - 319.5) / matrix[0,0] * r_distance, (r_v - 239.5) / matrix[1,1] * r_distance, r_distance, (b_u - 319.5) / matrix[0,0] * b_distance, (b_v - 239.5) / matrix[1,1] * b_distance, b_distance]
+	
+	pub.publish(coordinate)
 
 	rospy.loginfo(coordinate)
-
 	cv2.imshow("image", image)
 	cv2.waitKey(5)
 
