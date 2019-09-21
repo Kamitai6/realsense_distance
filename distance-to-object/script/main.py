@@ -24,7 +24,7 @@ def get_color_coordinate(frame):
 	scale_area = np.zeros((2, 480, 640, 3))
 	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-	
+	'''
 	#enemy move tracking
 	global before
 	if before is None:
@@ -37,11 +37,11 @@ def get_color_coordinate(frame):
 	if (len(m_area) != 0 and np.nanmax(m_area) / (640*480) > 0.005):
 		m_max_idx = np.argmax(m_area)
 		cv2.drawContours(frame, m_contours[m_max_idx], -1, (255,255,255), 3)
-
+	'''
 	#color_masking
 	LOW_RED = np.array([175, 75, 100])
 	HIGH_RED = np.array([180, 255, 255])
-	LOW_BLUE = np.array([95, 75, 150])
+	LOW_BLUE = np.array([95, 100, 150])
 	HIGH_BLUE = np.array([100, 255, 255])
 	r_mask = cv2.inRange(hsv, LOW_RED, HIGH_RED)
 	b_mask = cv2.inRange(hsv, LOW_BLUE, HIGH_BLUE)
@@ -77,6 +77,8 @@ def get_color_coordinate(frame):
 
 def calcu_scale(color_msgs, depth_msgs):
 	bridge = cv_bridge.CvBridge()
+	r_x = np.zeros((2, 2))
+	b_x = np.zeros((2, 2))
 	coordinate = Float32MultiArray()
 	coordinate.data = [0]*6
 	try:
@@ -86,35 +88,52 @@ def calcu_scale(color_msgs, depth_msgs):
 		rospy.logerr(e)
 	
 	area = get_color_coordinate(image)
-	
+
+	r_coordinates = np.where((area[0][0, :, :, 0]) > 0)
+	if (any(r_coordinates[0] >= 0)):
+		r_x[0,0] = np.min(r_coordinates[1])
+		r_x[0,1] = np.max(r_coordinates[1])
+		r_x[1,0] = np.min(r_coordinates[0])
+		r_x[1,1] = np.max(r_coordinates[0])
 	r_distance = np.mean(depth[((area[0][0, :, :, 0]) > 0)])
-	if(np.isnan(r_distance)): 
+	if(np.isnan(r_distance)):
 		r_distance = 0.0
 	r_u = int(area[1][0,0])
 	r_v = int(area[1][0,1])
+	cv2.circle(image, (r_u, r_v), 4, (0, 0, 255), 15)
 
+	b_coordinates = np.where((area[0][1, :, :, 0]) > 0)
+	if (any(b_coordinates[0] >= 0)):
+		b_x[0,0] = np.min(b_coordinates[1])
+		b_x[0,1] = np.max(b_coordinates[1])
+		b_x[1,0] = np.min(b_coordinates[0])
+		b_x[1,1] = np.max(b_coordinates[0])
 	b_distance = np.mean(depth[((area[0][1, :, :, 0]) > 0)])
-	if(np.isnan(b_distance)): 
+	if(np.isnan(b_distance)):
 		b_distance = 0.0
 	b_u = int(area[1][1,0])
 	b_v = int(area[1][1,1])
+	cv2.circle(image, (b_u, b_v), 4, (255, 0, 0), 15)
+	
+	r = np.array([((r_x[0,1] - 319.5) / matrix[0,0] * r_distance) - (r_x[0,0] - 319.5) / matrix[0,0] * r_distance, (r_x[1,1] - 239.5) / matrix[1,1] * r_distance - (r_x[1,0] - 239.5) / matrix[1,1] * r_distance])
+	b = np.array([((b_x[0,1] - 319.5) / matrix[0,0] * b_distance) - (b_x[0,0] - 319.5) / matrix[0,0] * b_distance, (b_x[1,1] - 239.5) / matrix[1,1] * b_distance - (b_x[1,0] - 239.5) / matrix[1,1] * b_distance])
 
 	coordinate.data = [(r_u - 319.5) / matrix[0,0] * r_distance, (r_v - 239.5) / matrix[1,1] * r_distance, r_distance, (b_u - 319.5) / matrix[0,0] * b_distance, (b_v - 239.5) / matrix[1,1] * b_distance, b_distance]
 	
 	pub.publish(coordinate)
-
-	rospy.loginfo(coordinate)
+	rospy.loginfo([r*2, b*2])
 	cv2.imshow("image", image)
+	#cv2.imshow("depth", depth)
 	cv2.waitKey(5)
 
 
 def setup():
-	rospy.Subscriber("/camera/depth/camera_info", CameraInfo, set_info)
+	rospy.Subscriber("/camera/aligned_depth_to_color/camera_info", CameraInfo, set_info)
 
 
 def listener():
 	rospy.init_node('main')
-	ts = message_filters.ApproximateTimeSynchronizer([message_filters.Subscriber("/camera/color/image_raw", Image), message_filters.Subscriber("/camera/depth/image_rect_raw", Image)], 10000, 0.5)
+	ts = message_filters.ApproximateTimeSynchronizer([message_filters.Subscriber("/camera/color/image_raw", Image), message_filters.Subscriber("/camera/aligned_depth_to_color/image_raw", Image)], 100, 0.5)
 	ts.registerCallback(calcu_scale)
 	rospy.spin()
 
