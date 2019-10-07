@@ -24,8 +24,8 @@ def get_color_coordinate(frame):
 	scale_area = np.zeros((2, 480, 640, 3))
 	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-	'''
 	#enemy move tracking
+	'''
 	global before
 	if before is None:
 		before = gray.copy().astype('float')
@@ -79,6 +79,7 @@ def calcu_scale(color_msgs, depth_msgs):
 	bridge = cv_bridge.CvBridge()
 	r_x = np.zeros((2, 2))
 	b_x = np.zeros((2, 2))
+	x_fix = np.zeros(2)
 	coordinate = Float32MultiArray()
 	coordinate.data = [0]*6
 	try:
@@ -118,10 +119,13 @@ def calcu_scale(color_msgs, depth_msgs):
 	r = np.array([((r_x[0,1] - 319.5) / matrix[0,0] * r_distance) - (r_x[0,0] - 319.5) / matrix[0,0] * r_distance, (r_x[1,1] - 239.5) / matrix[1,1] * r_distance - (r_x[1,0] - 239.5) / matrix[1,1] * r_distance])
 	b = np.array([((b_x[0,1] - 319.5) / matrix[0,0] * b_distance) - (b_x[0,0] - 319.5) / matrix[0,0] * b_distance, (b_x[1,1] - 239.5) / matrix[1,1] * b_distance - (b_x[1,0] - 239.5) / matrix[1,1] * b_distance])
 
-	coordinate.data = [(r_u - 319.5) / matrix[0,0] * r_distance, (r_v - 239.5) / matrix[1,1] * r_distance, r_distance, (b_u - 319.5) / matrix[0,0] * b_distance, (b_v - 239.5) / matrix[1,1] * b_distance, b_distance]
+	if(r[0] > 300): x_fix[0] = r[0] / 4
+	if(b[0] > 300): x_fix[1] = -b[0] / 4
+	
+	coordinate.data = [(r_u - 319.5) / matrix[0,0] * r_distance + x_fix[0], (r_v - 239.5) / matrix[1,1] * r_distance, r_distance, (b_u - 319.5) / matrix[0,0] * b_distance + x_fix[1], (b_v - 239.5) / matrix[1,1] * b_distance, b_distance]
 	
 	pub.publish(coordinate)
-	rospy.loginfo([r*2, b*2])
+	rospy.loginfo(coordinate)
 	cv2.imshow("image", image)
 	#cv2.imshow("depth", depth)
 	cv2.waitKey(5)
