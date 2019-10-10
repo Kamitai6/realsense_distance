@@ -25,14 +25,12 @@
   <build_depend>sensor_msgs</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>message_filters</build_depend>
-  <build_depend>rosserial-python</build_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
   <build_export_depend>sensor_msgs</build_export_depend>
   <build_export_depend>cv_bridge</build_export_depend>
   <build_export_depend>message_filters</build_export_depend>
-  <build_export_depend>rosserial-python</build_export_depend>
   
 
   <!-- The export tag contains other, unspecified, tags -->
