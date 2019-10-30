@@ -39,9 +39,9 @@ def get_color_coordinate(frame):
 		cv2.drawContours(frame, m_contours[m_max_idx], -1, (255,255,255), 3)
 	'''
 	#color_masking
-	LOW_RED = np.array([175, 75, 100])
+	LOW_RED = np.array([170, 80, 80])
 	HIGH_RED = np.array([180, 255, 255])
-	LOW_BLUE = np.array([95, 100, 150])
+	LOW_BLUE = np.array([90, 80, 80])
 	HIGH_BLUE = np.array([100, 255, 255])
 	r_mask = cv2.inRange(hsv, LOW_RED, HIGH_RED)
 	b_mask = cv2.inRange(hsv, LOW_BLUE, HIGH_BLUE)
@@ -49,7 +49,7 @@ def get_color_coordinate(frame):
 	b_image, b_contours, b_hierarchy = cv2.findContours(b_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 	r_area = np.array(list(map(cv2.contourArea,r_contours)))
 	b_area = np.array(list(map(cv2.contourArea,b_contours)))
-	if (len(r_area) != 0 and np.nanmax(r_area) / (640*480) > 0.01):
+	if (len(r_area) != 0 and np.nanmax(r_area) / (640*480) > 0.05):
 		r_max_idx = np.argmax(r_area)
 		r_max_area = r_contours[r_max_idx]
 		r_moment = cv2.moments(r_max_area)
@@ -60,7 +60,7 @@ def get_color_coordinate(frame):
 		cv2.fillConvexPoly(r_mask_mask, r_contours[r_max_idx], (255,255,255))
 		r_M = np.float32([[0.5, 0, (x[0,0]-x[0,0]/2)], [0, 0.5, (x[0,1]-x[0,1]/2)]])
 		scale_area[0] = cv2.warpAffine(r_mask_mask, r_M, (640, 480))
-	if (len(b_area) != 0 and np.nanmax(b_area) / (640*480) > 0.01):
+	if (len(b_area) != 0 and np.nanmax(b_area) / (640*480) > 0.05):
 		b_max_idx = np.argmax(b_area)
 		b_max_area = b_contours[b_max_idx]
 		b_result = cv2.moments(b_max_area)
@@ -117,12 +117,12 @@ def calcu_scale(color_msgs, depth_msgs):
 	r = np.array([((r_x[0,1] - 319.5) / matrix[0,0] * r_distance) - (r_x[0,0] - 319.5) / matrix[0,0] * r_distance, (r_x[1,1] - 239.5) / matrix[1,1] * r_distance - (r_x[1,0] - 239.5) / matrix[1,1] * r_distance])
 	b = np.array([((b_x[0,1] - 319.5) / matrix[0,0] * b_distance) - (b_x[0,0] - 319.5) / matrix[0,0] * b_distance, (b_x[1,1] - 239.5) / matrix[1,1] * b_distance - (b_x[1,0] - 239.5) / matrix[1,1] * b_distance])
 
-	if(r[0]*2 > 350):
+	if(r[0]*2 > 400):
 		x_fix[0] = r[0] / 2
 		cv2.circle(image, (r_u + int((r_x[0,1]-r_x[0,0])/2), r_v), 4, (0, 0, 255), 15)
 		cv2.circle(image, (r_u - int((r_x[0,1]-r_x[0,0])/2), r_v), 4, (0, 0, 255), 15)
 	else: cv2.circle(image, (r_u , r_v), 4, (0, 0, 255), 15)
-	if(b[0]*2 > 350):
+	if(b[0]*2 > 400):
 		x_fix[1] = -b[0] / 2
 		cv2.circle(image, (b_u - int((b_x[0,1]-b_x[0,0])/2), b_v), 4, (255, 0, 0), 15)
 		cv2.circle(image, (b_u + int((b_x[0,1]-b_x[0,0])/2), b_v), 4, (255, 0, 0), 15)
